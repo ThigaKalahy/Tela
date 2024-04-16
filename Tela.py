@@ -1,3 +1,5 @@
+import datetime
+import time
 from flask import Flask, render_template, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
@@ -15,7 +17,8 @@ HASHAUTH = "D32DCDE9-D9DB-43EF-81CF-AA6007032261"
 latest_data = {
     "temperature": None,
     "humidity": None,
-    "update_date": None
+    "update_date": None,
+    "last_id_position": None
 }
 
 def login():
@@ -36,11 +39,22 @@ def get_latest_position():
             "Authorization": token,
             "Content-Type": "application/json"
         }
-        params = [{
-            "PropertyName": "IdPosition",
-            "Condition": "GreaterThan",
-            "Value": latest_data.get("last_id_position", 4210004)
-        }]
+        if latest_data["last_id_position"] is None:
+            
+            start_datetime = datetime.datetime.utcnow() - datetime.timedelta(seconds=3)
+            params = [{
+                "PropertyName": "EventDate",
+                "Condition": "GreaterThan",
+                "Value": start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
+            }]
+        else:
+            
+            params = [{
+                "PropertyName": "IdPosition",
+                "Condition": "GreaterThan",
+                "Value": latest_data["last_id_position"]
+            }]
+        
         response = requests.post(POSITION_HISTORY_URL, headers=headers, json=params)
         if response.status_code == 200:
             data = response.json()
