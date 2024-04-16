@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medidores de Temperatura e Umidade</title>
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+  google.charts.load('current', {'packages':['gauge']});
+  google.charts.setOnLoadCallback(drawChart);
+
+  function drawChart() {
+    var data = google.visualization.arrayToDataTable([
+      ['Label', 'Value'],
+      ['Temperatura', 0],
+      ['Umidade', 0]
+    ]);
+
+    var options = {
+      width: 900, height: 300,
+      redFrom: 90, redTo: 100,
+      yellowFrom:75, yellowTo: 90,
+      minorTicks: 5
+    };
+
+    var chart = new google.visualization.Gauge(document.getElementById('chart_div'));
+
+    chart.draw(data, options);
+
+    // Atualiza os dados periodicamente
+    setInterval(function() {
+      fetch('/latest_data')
+        .then(response => response.json())
+        .then(latest_data => {
+          data.setValue(0, 1, latest_data.temperature);
+          data.setValue(1, 1, latest_data.humidity);
+          chart.draw(data, options);
+          // Atualiza a data da última atualização
+          var updateDate = new Date(latest_data.update_date);
+          document.getElementById('update_info').textContent = 'Última Atualização: ' +
+            updateDate.toLocaleTimeString('pt-BR') + ' ' +
+            updateDate.toLocaleDateString('pt-BR');
+        });
+    }, 10000);
+  }
+</script>
+<style>
+  body, html {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+  }
+  #chart_div {
+    width: 900px; /* Ajuste a largura conforme necessário */
+    height: 300px; /* Ajuste a altura conforme necessário */
+    transform: translateX(125px); /* Mova para a direita */
+    /* Para mover para a esquerda, use um valor negativo, como 'translateX(-100px)' */
+  }
+  #update_info {
+    margin-top: 20px;
+    position: absolute; /* Posicionamento absoluto para manter no centro */
+    bottom: 10%; /* Ajuste conforme necessário para alinhar com os medidores */
+    width: 100%;
+    text-align: center; /* Centraliza o texto horizontalmente */
+  }
+</style>
+</head>
+<body>
+<div id="chart_div"></div>
+<div id="update_info">Última Atualização: Carregando...</div>
+</body>
+</html>
