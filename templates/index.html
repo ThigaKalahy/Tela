@@ -6,70 +6,124 @@
 <title>Medidores de Temperatura e Umidade</title>
 <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 <script type="text/javascript">
-  google.charts.load('current', {'packages':['gauge']});
+  google.charts.load('current', {'packages':['gauge', 'corechart']});
   google.charts.setOnLoadCallback(drawChart);
 
+  var dataGauge; // Variável global para os medidores
+  var chartGauge; // Variável global para os medidores
+  var dataLine; // Variável global para o gráfico de linha
+  var chartLine; // Variável global para o gráfico de linha
+
   function drawChart() {
-    var data = google.visualization.arrayToDataTable([
+    // Desenha os medidores
+    dataGauge = google.visualization.arrayToDataTable([
       ['Label', 'Value'],
       ['Temperatura (°C)', 0],
       ['Umidade (%)', 0]
     ]);
 
-    var options = {
-      width: 900, height: 300,
+    var optionsGauge = {
+      width: 400, height: 120,
       redFrom: 90, redTo: 100,
       yellowFrom:75, yellowTo: 90,
       minorTicks: 5
     };
 
-    var chart = new google.visualization.Gauge(document.getElementById('chart_div'));
+    chartGauge = new google.visualization.Gauge(document.getElementById('chart_div'));
+    chartGauge.draw(dataGauge, optionsGauge);
 
-    chart.draw(data, options);
+    // Inicializa o gráfico de linha
+    dataLine = new google.visualization.DataTable();
+    dataLine.addColumn('datetime', 'Data');
+    dataLine.addColumn('number', 'Temperatura');
+    dataLine.addColumn('number', 'Umidade');
 
-    // Atualiza os dados periodicamente
-    setInterval(function() {
-      fetch('/latest_data')
-        .then(response => response.json())
-        .then(latest_data => {
-          data.setValue(0, 1, latest_data.temperature);
-          data.setValue(1, 1, latest_data.humidity);
-          chart.draw(data, options);
-          // Atualiza a data da última atualização
-          var updateDate = new Date(latest_data.update_date);
-          document.getElementById('update_info').textContent = 'Última Atualização: ' +
-            updateDate.toLocaleTimeString('pt-BR') + ' ' +
-            updateDate.toLocaleDateString('pt-BR');
-        });
-    }, 10000);
+    var optionsLine = {
+      title: 'Temperatura e Umidade ao Longo do Tempo',
+      curveType: 'function',
+      legend: { position: 'bottom' }
+    };
+
+    chartLine = new google.visualization.LineChart(document.getElementById('curve_chart'));
+    chartLine.draw(dataLine, optionsLine);
   }
+
+  // Função para adicionar novos dados ao gráfico de linha
+  function addDataToLineChart(temperature, humidity, updateDate) {
+    if (dataLine.getNumberOfRows() >= 20) {
+      dataLine.removeRow(0); // Remove a linha mais antiga se já tiver 20 dados
+    }
+    dataLine.addRow([new Date(updateDate), temperature, humidity]);
+    chartLine.draw(dataLine, {
+      title: 'Temperatura e Umidade ao Longo do Tempo',
+      curveType: 'function',
+      legend: { position: 'bottom' }
+    });
+  }
+
+  // Atualiza os dados periodicamente
+  setInterval(function() {
+    fetch('/latest_data')
+      .then(response => response.json())
+      .then(latest_data => {
+        // Atualiza os medidores
+        dataGauge.setValue(0, 1, latest_data.temperature);
+        dataGauge.setValue(1, 1, latest_data.humidity);
+        chartGauge.draw(dataGauge, {
+          width: 400, height: 120,
+          redFrom: 90, redTo: 100,
+          yellowFrom:75, yellowTo: 90,
+          minorTicks: 5
+        });
+
+        // Atualiza o gráfico de linha com novos dados
+        addDataToLineChart(latest_data.temperature, latest_data.humidity, latest_data.update_date);
+
+        // Atualiza a data da última atualização
+        document.getElementById('update_info').innerHTML = 'Última Atualização: ' + new Date(latest_data.update_date).toLocaleString();
+      });
+  }, 10000);
 </script>
 <style>
   body, html {
     height: 100%;
     margin: 0;
     display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
+    justify-content: space-between; /* Alinha horizontalmente */
+    align-items: center; /* Centraliza verticalmente */
+    flex-direction: row; /* Organiza os elementos em linha */
   }
-  #chart_div {
-    width: 900px; /* Ajuste a largura conforme necessário */
-    height: 300px; /* Ajuste a altura conforme necessário */
-    transform: translateX(125px); /* Mova para a direita */
-    /* Para mover para a esquerda, use um valor negativo, como 'translateX(-100px)' */
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 50%; /* Define a largura para metade da tela */
+  }
+  #chart_div, #curve_chart {
+    width: 400px;
+    height: 120px;
+    margin: 15px;
+    position: relative; /* Permite movimentação horizontal */
   }
   #update_info {
-    margin-top: 20px;
-    position: absolute; /* Posicionamento absoluto para manter no centro */
-    bottom: 10%; /* Ajuste conforme necessário para alinhar com os medidores */
-    width: 100%;
     text-align: center; /* Centraliza o texto horizontalmente */
+    width: 100%; /* Faz o texto ocupar toda a largura do container */
+    position: absolute; /* Posicionamento absoluto */
+    bottom: 10%; /* Posiciona mais acima no container */
+  }
+  /* Estilos para diminuir o tamanho das fontes dentro dos medidores */
+  #chart_div text, #chart_div tspan, #curve_chart text, #curve_chart tspan {
+    font-size: 8px;
   }
 </style>
 </head>
 <body>
-<div id="chart_div"></div>
+<div class="container" id="gauge_container">
+  <div id="chart_div"></div>
+</div>
+<div class="container" id="chart_container">
+  <div id="curve_chart"></div>
+</div>
 <div id="update_info">Última Atualização: Carregando...</div>
 </body>
 </html>

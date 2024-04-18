@@ -1,5 +1,4 @@
 import datetime
-import time
 from flask import Flask, render_template, jsonify
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
@@ -14,6 +13,10 @@ USERNAME = "systemday24@systemsat.com.br"
 PASSWORD = "123456"
 HASHAUTH = "D32DCDE9-D9DB-43EF-81CF-AA6007032261"
 
+
+last_20_temperatures = []
+last_20_humidities = []
+
 latest_data = {
     "temperature": None,
     "humidity": None,
@@ -21,26 +24,26 @@ latest_data = {
     "last_id_position": None
 }
 
+access_token = None
+
 def login():
+    global access_token
     url = f"{LOGIN_URL}?username={USERNAME}&password={PASSWORD}&hashauth={HASHAUTH}"
     response = requests.post(url)
     if response.status_code == 200:
         token_response = response.json()
         access_token = token_response["AccessToken"]
-        return access_token
     else:
         print(f"Erro ao fazer login: {response.text}")
-        return None
 
 def get_latest_position():
-    token = login()
-    if token:
+    global access_token
+    if access_token:
         headers = {
-            "Authorization": token,
+            "Authorization": access_token,
             "Content-Type": "application/json"
         }
         if latest_data["last_id_position"] is None:
-            
             start_datetime = datetime.datetime.utcnow() - datetime.timedelta(seconds=3)
             params = [{
                 "PropertyName": "EventDate",
@@ -48,7 +51,6 @@ def get_latest_position():
                 "Value": start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
             }]
         else:
-            
             params = [{
                 "PropertyName": "IdPosition",
                 "Condition": "GreaterThan",
@@ -60,28 +62,51 @@ def get_latest_position():
             data = response.json()
             if data:
                 latest_position = data[0]
-                latest_data["temperature"] = latest_position["ListTelemetry"].get("9")
-                latest_data["humidity"] = latest_position["ListTelemetry"].get("526")
-                latest_data["update_date"] = latest_position["UpdateDate"]
-                latest_data["last_id_position"] = latest_position["IdPosition"]
+                temperature = latest_position["ListTelemetry"].get("9")
+                humidity = latest_position["ListTelemetry"].get("526")
+                update_date = latest_position["UpdateDate"]
+                last_id_position = latest_position["IdPosition"]
+                latest_data.update({
+                    "temperature": temperature,
+                    "humidity": humidity,
+                    "update_date": update_date,
+                    "last_id_position": last_id_position
+                })
+                
+                if temperature is not None:
+                    last_20_temperatures.append(temperature)
+                    if len(last_20_temperatures) > 20:
+                        last_20_temperatures.pop(0)
+                if humidity is not None:
+                    last_20_humidities.append(humidity)
+                    if len(last_20_humidities) > 20:
+                        last_20_humidities.pop(0)
             else:
                 print("Falha no retorno.")
         else:
             print(f"Erro ao obter posição mais recente: {response.text}")
     else:
-        print("Erro ao fazer login.")
+        print("Token de acesso não disponível. Realize o login.")
+
+def daily_login():
+    login()
+   
+    get_latest_position()
 
 scheduler = BackgroundScheduler(daemon=True)
+scheduler.add_job(daily_login, 'interval', days=1)  
 scheduler.add_job(get_latest_position, 'interval', seconds=10)
 scheduler.start()
 
 @app.route('/')
 def index():
-    return render_template('index.html', temperature=latest_data["temperature"], humidity=latest_data["humidity"], update_date=latest_data["update_date"])
+    return render_template('index.html', temperature=latest_data["temperature"], humidity=latest_data["humidity"], update_date=latest_data["update_date"], last_20_temperatures=last_20_temperatures, last_20_humidities=last_20_humidities)
 
 @app.route('/latest_data')
 def get_latest_data():  
     return jsonify(temperature=latest_data["temperature"], humidity=latest_data["humidity"], update_date=latest_data["update_date"])
 
 if __name__ == '__main__':
+    # Chamar daily_login uma vez ao iniciar o programa para garantir que o token de acesso esteja disponível
+    daily_login()
     app.run(debug=True)
